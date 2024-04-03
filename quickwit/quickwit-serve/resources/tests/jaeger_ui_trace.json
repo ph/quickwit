@@ -149,6 +149,27 @@
         "warnings": [
           "some span warning"
         ]
+      },
+      {
+        "traceID": "0000000000000001",
+        "spanID": "0000000000000006",
+        "operationName": "preserveParentID-test",
+        "flags": 0,
+        "references": [
+          {
+            "refType": "CHILD_OF",
+            "traceID": "0000000000000001",
+            "spanID": "0000000000000004"
+          }
+        ],
+        "startTime": 1485467191639875,
+        "duration": 4,
+        "tags": [],
+        "logs": [],
+        "processID": "p3",
+        "warnings": [
+          "some span warning"
+        ]
       }
     ],
     "processes": {
@@ -161,6 +182,17 @@
         "serviceName": "service-y",
         "key": "p2",
         "tags": []
+      },
+      "p3": {
+        "serviceName": "service-y",
+        "key": "p3",
+	"tags": [
+	  {
+	    "key": "peer.service",
+	    "type": "string",
+	    "value": "service-y"
+	  }
+	]
       }
     },
     "warnings": [

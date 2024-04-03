@@ -94,7 +94,6 @@ impl JaegerTrace {
     /// processed `JaegerProcess` objects and assigns a new key to each unique `service_name` value.
     /// The logic has been replicated from
     /// <https://github.com/jaegertracing/jaeger/blob/995231c42cadd70bce2bbbf02579e33f6e6329c8/model/converter/json/process_hashtable.go#L37>
-    /// TODO: use also tags to identify processes.
     fn build_process_map(spans: &mut [JaegerSpan]) -> HashMap<String, JaegerProcess> {
         let mut service_name_to_process_id: HashMap<String, String> = HashMap::new();
         let mut process_map: HashMap<String, JaegerProcess> = HashMap::new();
@@ -103,18 +102,15 @@ impl JaegerTrace {
             let Some(current_process) = span.process.as_mut() else {
                 continue;
             };
-            if let Some(process_id) = service_name_to_process_id.get(&current_process.service_name)
-            {
+            if let Some(process_id) = service_name_to_process_id.get(&current_process.hash_key()) {
                 span.process_id = Some(process_id.clone());
             } else {
                 process_counter += 1;
                 current_process.key = format!("p{}", process_counter);
                 span.process_id = Some(current_process.key.clone());
                 process_map.insert(current_process.key.clone(), current_process.clone());
-                service_name_to_process_id.insert(
-                    current_process.service_name.clone(),
-                    current_process.key.clone(),
-                );
+                service_name_to_process_id
+                    .insert(current_process.hash_key(), current_process.key.clone());
             }
         }
         process_map
@@ -298,6 +294,23 @@ impl Default for JaegerProcess {
             key: "".to_string(),
             tags: Vec::new(),
         }
+    }
+}
+
+impl JaegerProcess {
+    /// hash_key creates a key to be used while generating the process map.
+    /// The key is a combination of the service_name and the tags.
+    /// NOTE: that the tags are sorted to ensure that the key is consistent,
+    /// but they are not completely denormalized.
+    fn hash_key(&self) -> String {
+        if self.tags.is_empty() {
+            return self.service_name.clone();
+        }
+
+        let mut tags = self.tags.iter().map(|t| t.key.clone()).collect::<Vec<_>>();
+        tags.sort();
+
+        format!("{}:{}", self.service_name, tags.join("-"))
     }
 }
 
@@ -555,6 +568,36 @@ mod tests {
             warnings: vec!["some span warning".to_string()],
             ..Default::default()
         };
-        vec![span_0, span_1, span_2, span_3, span_4]
+        let span_5 = quickwit_proto::jaeger::api_v2::Span {
+            operation_name: "preserveParentID-test".to_string(),
+            trace_id: vec![1],
+            span_id: vec![6],
+            references: vec![quickwit_proto::jaeger::api_v2::SpanRef {
+                trace_id: vec![1],
+                span_id: vec![4],
+                ref_type: 0,
+            }],
+            start_time: Some(prost_types::Timestamp {
+                seconds: 1485467191,
+                nanos: 639875000,
+            }),
+            duration: Some(prost_types::Duration {
+                seconds: 0,
+                nanos: 4000,
+            }),
+            process: Some(quickwit_proto::jaeger::api_v2::Process {
+                service_name: "service-y".to_string(),
+                tags: vec![quickwit_proto::jaeger::api_v2::KeyValue {
+                    key: "peer.service".to_string(),
+                    v_type: 0,
+                    v_str: "service-y".to_string(),
+                    ..Default::default()
+                }],
+            }),
+            process_id: "".to_string(),
+            warnings: vec!["some span warning".to_string()],
+            ..Default::default()
+        };
+        vec![span_0, span_1, span_2, span_3, span_4, span_5]
     }
 }
